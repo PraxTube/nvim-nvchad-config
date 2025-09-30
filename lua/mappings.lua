@@ -2,8 +2,6 @@ require "nvchad.mappings"
 
 local map = vim.keymap.set
 
-map("n", ";", ":", { desc = "CMD enter command mode" })
-map("i", "jk", "<ESC>")
 map("n", "<leader>s", 
       function()
         local focusable_windows_on_tabpage = vim.tbl_filter(
@@ -14,4 +12,21 @@ map("n", "<leader>s",
       end, { desc = "Jump to Word"}
 )
 
+map("n", "<leader>ra", 
+      function()
+        local word = vim.fn.expand("<cword>")
+        if word == "" then return end
+
+        vim.fn.setreg("/", "\\<" .. word .. "\\>")
+        vim.opt.hlsearch = true
+        vim.cmd("redraw!")
+
+        local new_name = vim.fn.input("Rename '" .. word .. "' to: ")
+        if new_name == "" then return end
+
+        vim.cmd("%s/\\<" .. word .. "\\>/" .. new_name .. "/g")
+      end, { desc = "Rename"}
+)
+
 -- map({ "n", "i", "v" }, "<C-s>", "<cmd> w <cr>")
+-- map("i", "jk", "<ESC>")

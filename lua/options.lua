@@ -123,3 +123,20 @@ vim.api.nvim_set_hl(0, "GitSignsCurrentLineBlame", {
   fg = "#586e75",
   italic = true,
 })
+
+-- vim.api.nvim_create_autocmd("BufWritePre", {
+--   pattern = "*.odin",
+--   callback = function()
+--     vim.cmd([[%!odinfmt]])
+--   end,
+-- })
+
+vim.api.nvim_create_autocmd("BufWritePost", {
+  pattern = "*.odin",
+  callback = function()
+    -- local view = vim.fn.winsaveview()
+    vim.cmd("silent! !odinfmt -w %")
+    vim.cmd("checktime")
+    -- vim.fn.winrestview(view)
+  end,
+})
