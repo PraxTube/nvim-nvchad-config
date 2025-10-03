@@ -28,5 +28,11 @@ map("n", "<leader>ra",
       end, { desc = "Rename"}
 )
 
+map("v", ">", ">gv")
+map("v", "<", "<gv")
+
+map("n", "j", "gj")
+map("n", "k", "gk")
+
 -- map({ "n", "i", "v" }, "<C-s>", "<cmd> w <cr>")
 -- map("i", "jk", "<ESC>")
