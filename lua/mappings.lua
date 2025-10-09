@@ -36,3 +36,56 @@ map("n", "k", "gk")
 
 -- map({ "n", "i", "v" }, "<C-s>", "<cmd> w <cr>")
 -- map("i", "jk", "<ESC>")
+
+local function grep_and_open_async()
+  local word = vim.fn.expand("<cword>")
+  if word == "" then
+    print("No word under cursor")
+    return
+  end
+
+  -- Escape any regex special chars in the word (important!)
+  local safe_word = vim.fn.escape(word, "\\/.*$^~[]")
+  local pattern = string.format("\\b%s\\b\\s*::", safe_word)
+
+  local cmd = { "rg", "--vimgrep", "--pcre2", pattern, "." }
+
+  vim.fn.jobstart(cmd, {
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      if not data or #data == 0 or data[1] == "" then
+        vim.schedule(function()
+          print("No matches found for: " .. pattern)
+        end)
+        return
+      end
+
+      -- Parse first match (filename:line:col:text)
+      local first = data[1]
+      local filename, lnum, col = first:match("([^:]+):(%d+):(%d+):")
+
+      if not filename then
+        vim.schedule(function()
+          print("Could not parse rg result: " .. first)
+        end)
+        return
+      end
+
+      vim.schedule(function()
+        -- Check if file is already open
+        local bufnr = vim.fn.bufnr(filename)
+        if bufnr ~= -1 then
+          vim.cmd("buffer " .. bufnr)
+        else
+          vim.cmd("edit " .. filename)
+        end
+
+        vim.cmd("normal! m'")
+        vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
+        print("Opened first match for: " .. word .. " ::")
+      end)
+    end,
+  })
+end
+
+vim.keymap.set("n", "go", grep_and_open_async, { noremap = true, silent = true, desc = "Async grep <cword> :: and open first match" })
