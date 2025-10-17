@@ -103,6 +103,22 @@ vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
   end,
 })
 
+vim.api.nvim_create_autocmd({ "BufEnter" }, {
+  pattern = "*/atlas.odin",
+  callback = function()
+        vim.cmd("TSDisable highlight")
+        vim.cmd("syntax on")
+  end,
+})
+
+vim.api.nvim_create_autocmd({ "BufUnload" }, {
+  pattern = "*/atlas.odin",
+  callback = function()
+        vim.cmd("syntax off")
+        vim.cmd("TSEnable highlight")
+  end,
+})
+
 vim.filetype.add({
     extension = {
         ldtk = "json",
