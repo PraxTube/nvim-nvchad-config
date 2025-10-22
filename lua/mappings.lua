@@ -37,11 +37,8 @@ map("n", "k", "gk")
 -- map({ "n", "i", "v" }, "<C-s>", "<cmd> w <cr>")
 -- map("i", "jk", "<ESC>")
 
-map("n", "<leader>o", ":vsplit | terminal odin run . -debug<CR> | G", { desc = "Run Odin in Term"})
-map("n", "<leader>O", ":!odin build . -debug<CR>", { desc = "Build Odin as CMD"})
-
 vim.api.nvim_create_autocmd("TermClose", {
-  pattern = "*odin run*",
+  pattern = "run.sh*",
   callback = function(args)
     local bufnr = args.buf
     -- Check if the buffer still exists and is a terminal
@@ -56,17 +53,65 @@ vim.api.nvim_create_autocmd("TermClose", {
   end,
 })
 
-local function run_odin_build()
-    vim.cmd("!odin build . -debug")
+local function find_script(start_dir, script_name)
+    local Path = require("plenary.path") 
+    local dir = Path:new(start_dir)
+
+    while dir.filename ~= "/" do
+        local build_script = dir:joinpath(script_name)
+        if build_script:exists() then
+            return build_script:absolute()
+        end
+        dir = dir:parent()
+    end
+
+    return nil
+end
+
+local function run_build_script()
+    local cwd = vim.fn.getcwd()
+    local build_script = find_script(cwd, "build.sh")
+
+    if not build_script then
+        vim.notify("⚠️ No build.sh found in current or parent directories", vim.log.levels.WARN)
+        return
+    end
+
+    local cmd = string.format("bash %s", vim.fn.shellescape(build_script))
+    vim.cmd("!" .. cmd)
+
     if vim.v.shell_error == 0 then
           vim.cmd("redraw!")
-          vim.notify("✅ Odin build succeeded", vim.log.levels.INFO)
+          vim.notify("✅ Build succeeded", vim.log.levels.INFO)
     else
-          vim.notify("❌ Odin build failed", vim.log.levels.ERROR)
+          vim.notify("❌ Build failed", vim.log.levels.ERROR)
     end
 end
 
-vim.keymap.set("n", "<leader>O", run_odin_build, { desc = "Build Odin" })
+local function run_run_script()
+    local cwd = vim.fn.getcwd()
+    local run_script = find_script(cwd, "run.sh")
+
+    if not run_script then
+        vim.notify("⚠️ No run.sh found in current or parent directories", vim.log.levels.WARN)
+        return
+    end
+
+    local cmd = string.format("bash %s", vim.fn.shellescape(run_script))
+    vim.cmd("vsplit")
+    vim.cmd("terminal " .. cmd)
+    vim.cmd("normal! G")
+
+    -- if vim.v.shell_error == 0 then
+    --       vim.cmd("redraw!")
+    --       vim.notify("✅ Build succeeded", vim.log.levels.INFO)
+    -- else
+    --       vim.notify("❌ Build failed", vim.log.levels.ERROR)
+    -- end
+end
+
+map("n", "<leader>o", run_run_script, { desc = "Run run.sh"})
+map("n", "<leader>O", run_build_script, { desc = "Run build.sh" })
 
 local function grep_and_open_async()
   local word = vim.fn.expand("<cword>")
