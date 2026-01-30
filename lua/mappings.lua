@@ -117,56 +117,73 @@ local function grep_and_open_async()
     return
   end
 
-  -- Escape any regex special chars in the word (important!)
+  -- Escape regex chars
   local safe_word = vim.fn.escape(word, "\\/.*$^~[]")
 
-  local vim_search_pattern = string.format("\\<%s\\>\\s*::", safe_word)
-  local found = vim.fn.search(vim_search_pattern, "s")
-  if found ~= 0 then
-    vim.cmd("normal! zz")
-    return
+  -- Preferred and fallback patterns
+  local vim_patterns = {
+    string.format("\\<%s\\>\\s*::", safe_word),
+    string.format("\\<%s\\>\\s*:\\s*.*=", safe_word),
+  }
+
+  -- 1. Try current buffer first (fast)
+  for _, pat in ipairs(vim_patterns) do
+    if vim.fn.search(pat, "s") ~= 0 then
+      vim.cmd("normal! zz")
+      return
+    end
   end
 
-  local pattern = string.format("\\b%s\\b\\s*::", safe_word)
-  local cmd = { "rg", "--vimgrep", "--pcre2", pattern, "." }
+  -- 2. Fallback to ripgrep
+  local rg_patterns = {
+    string.format("\\b%s\\b\\s*::", safe_word),
+    string.format("\\b%s\\b\\s*:\\s*.*=", safe_word),
+  }
 
-  vim.fn.jobstart(cmd, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data or #data == 0 or data[1] == "" then
-        vim.schedule(function()
-          print("No matches found for: " .. pattern)
-        end)
-        return
-      end
-
-      -- Parse first match (filename:line:col:text)
-      local first = data[1]
-      local filename, lnum, col = first:match("([^:]+):(%d+):(%d+):")
-
-      if not filename then
-        vim.schedule(function()
-          print("Could not parse rg result: " .. first)
-        end)
-        return
-      end
-
+  local function run_rg(idx)
+    if idx > #rg_patterns then
       vim.schedule(function()
-        vim.cmd("normal! m'")
+        print("No matches found for: " .. word)
+      end)
+      return
+    end
 
-        -- Check if file is already open
-        local bufnr = vim.fn.bufnr(filename)
-        if bufnr ~= -1 then
-          vim.cmd("buffer " .. bufnr)
-        else
-          vim.cmd("edit " .. filename)
+    local cmd = { "rg", "--vimgrep", "--pcre2", rg_patterns[idx], "." }
+
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if not data or #data == 0 or data[1] == "" then
+          -- Try next pattern
+          run_rg(idx + 1)
+          return
         end
 
-        vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
-        vim.cmd("normal! zz")
-      end)
-    end,
-  })
+        local first = data[1]
+        local filename, lnum, col = first:match("([^:]+):(%d+):(%d+):")
+        if not filename then
+          run_rg(idx + 1)
+          return
+        end
+
+        vim.schedule(function()
+          vim.cmd("normal! m'")
+
+          local bufnr = vim.fn.bufnr(filename)
+          if bufnr ~= -1 then
+            vim.cmd("buffer " .. bufnr)
+          else
+            vim.cmd("edit " .. filename)
+          end
+
+          vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
+          vim.cmd("normal! zz")
+        end)
+      end,
+    })
+  end
+
+  run_rg(1)
 end
 
 vim.keymap.set("n", "go", grep_and_open_async, { noremap = true, silent = true, desc = "Async grep <cword> :: and open first match" })
