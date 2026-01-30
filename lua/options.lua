@@ -61,6 +61,9 @@ vim.cmd('autocmd FileType odin setlocal tabstop=4')
 vim.cmd('autocmd FileType glsl setlocal shiftwidth=4')
 vim.cmd('autocmd FileType glsl setlocal tabstop=4')
 
+vim.cmd('autocmd FileType make setlocal shiftwidth=4')
+vim.cmd('autocmd FileType make setlocal tabstop=4')
+
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
   pattern = "*.wgsl",
   callback = function()
@@ -104,7 +107,7 @@ vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
 })
 
 vim.api.nvim_create_autocmd({ "BufEnter" }, {
-  pattern = "*/atlas.odin",
+  pattern = "*/res.odin",
   callback = function()
         vim.cmd("TSDisable highlight")
         vim.cmd("syntax on")
@@ -112,7 +115,7 @@ vim.api.nvim_create_autocmd({ "BufEnter" }, {
 })
 
 vim.api.nvim_create_autocmd({ "BufUnload" }, {
-  pattern = "*/atlas.odin",
+  pattern = "*/res.odin",
   callback = function()
         vim.cmd("syntax off")
         vim.cmd("TSEnable highlight")
@@ -155,4 +158,42 @@ vim.api.nvim_create_autocmd("BufWritePost", {
     vim.cmd("checktime")
     -- vim.fn.winrestview(view)
   end,
+})
+
+
+local ns = vim.api.nvim_create_namespace("comment_fill")
+
+local function render_visible_comment_fills()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local win = vim.api.nvim_get_current_win()
+
+    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+
+    local top = vim.fn.line("w0", win) - 1
+    local bottom = vim.fn.line("w$", win) - 1
+    local width = math.min(80, vim.api.nvim_win_get_width(win))
+
+    for lnum = top, bottom do
+        local line = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1]
+            if line and line:match("^//%s*%-%-%-") then
+                local col = #line
+                local remaining = math.max(0, width - col - 1)
+
+                vim.api.nvim_buf_set_extmark(bufnr, ns, lnum, col, {
+                virt_text = { { string.rep("=", remaining), "Comment" } },
+                virt_text_pos = "eol",
+                hl_mode = "combine",
+              })
+        end
+    end
+end
+
+vim.api.nvim_create_autocmd({
+  "TextChanged",
+  "TextChangedI",
+  "WinScrolled",
+  "WinResized",
+  "BufEnter",
+}, {
+  callback = render_visible_comment_fills,
 })

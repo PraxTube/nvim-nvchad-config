@@ -33,9 +33,13 @@ map("v", "<", "<gv")
 
 map("n", "j", "gj")
 map("n", "k", "gk")
+map("v", "j", "gj")
+map("v", "k", "gk")
 
--- map({ "n", "i", "v" }, "<C-s>", "<cmd> w <cr>")
--- map("i", "jk", "<ESC>")
+map("n", "n", "nzz")
+map("n", "N", "Nzz")
+map("n", "*", "*zz")
+map("n", "#", "#zz")
 
 vim.api.nvim_create_autocmd("TermClose", {
   pattern = "run.sh*",
@@ -101,13 +105,6 @@ local function run_run_script()
     vim.cmd("vsplit")
     vim.cmd("terminal " .. cmd)
     vim.cmd("normal! G")
-
-    -- if vim.v.shell_error == 0 then
-    --       vim.cmd("redraw!")
-    --       vim.notify("✅ Build succeeded", vim.log.levels.INFO)
-    -- else
-    --       vim.notify("❌ Build failed", vim.log.levels.ERROR)
-    -- end
 end
 
 map("n", "<leader>o", run_run_script, { desc = "Run run.sh"})
@@ -122,8 +119,15 @@ local function grep_and_open_async()
 
   -- Escape any regex special chars in the word (important!)
   local safe_word = vim.fn.escape(word, "\\/.*$^~[]")
-  local pattern = string.format("\\b%s\\b\\s*::", safe_word)
 
+  local vim_search_pattern = string.format("\\<%s\\>\\s*::", safe_word)
+  local found = vim.fn.search(vim_search_pattern, "s")
+  if found ~= 0 then
+    vim.cmd("normal! zz")
+    return
+  end
+
+  local pattern = string.format("\\b%s\\b\\s*::", safe_word)
   local cmd = { "rg", "--vimgrep", "--pcre2", pattern, "." }
 
   vim.fn.jobstart(cmd, {
@@ -160,7 +164,6 @@ local function grep_and_open_async()
 
         vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
         vim.cmd("normal! zz")
-        print("Opened first match for: " .. word .. " ::")
       end)
     end,
   })
