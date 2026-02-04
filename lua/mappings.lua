@@ -124,6 +124,7 @@ local function grep_and_open_async()
   local vim_patterns = {
     string.format("\\<%s\\>\\s*::", safe_word),
     string.format("\\<%s\\>\\s*:\\s*.*=", safe_word),
+    string.format("\\<%s\\>\\s*:", safe_word),
   }
 
   -- 1. Try current buffer first (fast)
@@ -138,6 +139,7 @@ local function grep_and_open_async()
   local rg_patterns = {
     string.format("\\b%s\\b\\s*::", safe_word),
     string.format("\\b%s\\b\\s*:\\s*.*=", safe_word),
+    string.format("\\b%s\\b\\s*:", safe_word),
   }
 
   local function run_rg(idx)
@@ -169,12 +171,7 @@ local function grep_and_open_async()
         vim.schedule(function()
           vim.cmd("normal! m'")
 
-          local bufnr = vim.fn.bufnr(filename)
-          if bufnr ~= -1 then
-            vim.cmd("buffer " .. bufnr)
-          else
-            vim.cmd("edit " .. filename)
-          end
+          vim.cmd("edit " .. filename)
 
           vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
           vim.cmd("normal! zz")
@@ -187,3 +184,33 @@ local function grep_and_open_async()
 end
 
 vim.keymap.set("n", "go", grep_and_open_async, { noremap = true, silent = true, desc = "Async grep <cword> :: and open first match" })
+
+
+local function rg_replace()
+    local word = vim.fn.expand("<cword>")
+        if word == "" then
+            print("No word under cursor")
+        return
+    end
+
+    local safe_word = vim.fn.escape(word, "\\/.*$^~[]")
+    local pattern = "\\b" .. safe_word .. "\\b"
+
+    -- Populate quickfix
+    vim.cmd("cexpr system('rg --vimgrep --pcre2 \"" .. pattern .. "\"')")
+
+    if vim.fn.len(vim.fn.getqflist()) == 0 then
+        print("No matches found for: " .. word)
+        return
+    end
+
+    vim.cmd("copen")
+
+    print("Quickfix populated. Run:")
+    vim.fn.feedkeys(
+      ":" .. "cfdo %s/\\<" .. word .. "\\>/REPLACEMENT/gc",
+      "n"
+    )
+end
+
+vim.keymap.set("n", "<leader>rA", rg_replace, { desc = "Project wide replacement of word under." })
