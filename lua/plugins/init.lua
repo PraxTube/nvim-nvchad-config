@@ -70,4 +70,17 @@ return {
   -- "tpope/vim-fugitive",
 
   { "ggandor/leap.nvim", lazy = false},
+
+{
+  {
+    "hrsh7th/nvim-cmp",
+    opts = function(_, opts)
+      opts.sources = {
+        { name = "nvim_lsp" },
+        { name = "buffer" },
+        { name = "path" },
+      }
+    end,
+  },
+}
 }
