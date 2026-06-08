@@ -111,6 +111,49 @@ map("n", "<leader>o", run_run_script, { desc = "Run run.sh"})
 map("n", "<leader>O", run_build_script, { desc = "Run build.sh" })
 
 local function grep_and_open_async()
+  local function run_vim_search(patterns)
+    for _, pat in ipairs(patterns) do
+      if vim.fn.search(pat, "s") ~= 0 then
+        vim.cmd("normal! zz")
+        return true
+      end
+    end
+    return false
+  end
+
+  local function run_rg(idx, patterns, on_fail)
+    if idx > #patterns then
+      if on_fail then on_fail() end
+      return
+    end
+
+    local cmd = { "rg", "--vimgrep", "--pcre2", patterns[idx], "." }
+
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if not data or #data == 0 or data[1] == "" then
+          run_rg(idx + 1, patterns, on_fail)
+          return
+        end
+
+        local first = data[1]
+        local filename, lnum, col = first:match("([^:]+):(%d+):(%d+):")
+        if not filename then
+          run_rg(idx + 1, patterns, on_fail)
+          return
+        end
+
+        vim.schedule(function()
+          vim.cmd("normal! m'")
+          vim.cmd("edit " .. filename)
+          vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
+          vim.cmd("normal! zz")
+        end)
+      end,
+    })
+  end
+
   local word = vim.fn.expand("<cword>")
   if word == "" then
     print("No word under cursor")
@@ -120,67 +163,44 @@ local function grep_and_open_async()
   -- Escape regex chars
   local safe_word = vim.fn.escape(word, "\\/.*$^~[]")
 
-  -- Preferred and fallback patterns
-  local vim_patterns = {
+  local first_vim_patterns = {
+    string.format("\\<%s\\>\\s*::\\s*proc", safe_word),
+    string.format("\\<%s\\>\\s*::\\s*struct", safe_word),
+    string.format("\\<%s\\>\\s*::\\s*enum", safe_word),
+  }
+  local first_rg_patterns = {
+    string.format("\\b%s\\b\\s*::\\s*proc", safe_word),
+    string.format("\\b%s\\b\\s*::\\s*struct", safe_word),
+    string.format("\\b%s\\b\\s*::\\s*enum", safe_word),
+  }
+  local second_vim_patterns = {
     string.format("\\<%s\\>\\s*::", safe_word),
     string.format("\\<%s\\>\\s*:\\s*.*=", safe_word),
     string.format("\\<%s\\>\\s*:", safe_word),
   }
-
-  -- 1. Try current buffer first (fast)
-  for _, pat in ipairs(vim_patterns) do
-    if vim.fn.search(pat, "s") ~= 0 then
-      vim.cmd("normal! zz")
-      return
-    end
-  end
-
-  -- 2. Fallback to ripgrep
-  local rg_patterns = {
+  local second_rg_patterns = {
     string.format("\\b%s\\b\\s*::", safe_word),
     string.format("\\b%s\\b\\s*:\\s*.*=", safe_word),
     string.format("\\b%s\\b\\s*:", safe_word),
   }
 
-  local function run_rg(idx)
-    if idx > #rg_patterns then
-      vim.schedule(function()
-        print("No matches found for: " .. word)
-      end)
+  -- 1. Try first patterns in buffer
+  if run_vim_search(first_vim_patterns) then
+    return
+  end
+
+  -- 2. Try first patterns via rg
+  run_rg(1, first_rg_patterns, function()
+    -- 3. Try second patterns in buffer
+    if run_vim_search(second_vim_patterns) then
       return
     end
 
-    local cmd = { "rg", "--vimgrep", "--pcre2", rg_patterns[idx], "." }
-
-    vim.fn.jobstart(cmd, {
-      stdout_buffered = true,
-      on_stdout = function(_, data)
-        if not data or #data == 0 or data[1] == "" then
-          -- Try next pattern
-          run_rg(idx + 1)
-          return
-        end
-
-        local first = data[1]
-        local filename, lnum, col = first:match("([^:]+):(%d+):(%d+):")
-        if not filename then
-          run_rg(idx + 1)
-          return
-        end
-
-        vim.schedule(function()
-          vim.cmd("normal! m'")
-
-          vim.cmd("edit " .. filename)
-
-          vim.api.nvim_win_set_cursor(0, { tonumber(lnum), tonumber(col) - 1 })
-          vim.cmd("normal! zz")
-        end)
-      end,
-    })
-  end
-
-  run_rg(1)
+    -- 4. Try second patterns via rg
+    run_rg(1, second_rg_patterns, function()
+      print("No matches found for: " .. word)
+    end)
+  end)
 end
 
 vim.keymap.set("n", "go", grep_and_open_async, { noremap = true, silent = true, desc = "Async grep <cword> :: and open first match" })

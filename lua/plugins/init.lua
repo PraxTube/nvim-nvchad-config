@@ -69,7 +69,7 @@ return {
 
   -- "tpope/vim-fugitive",
 
-  { "ggandor/leap.nvim", lazy = false},
+  { url = "https://codeberg.org/andyg/leap.nvim", lazy = false},
 
 {
   {

@@ -49,8 +49,8 @@ vim.cmd('autocmd FileType nu setlocal tabstop=4')
 vim.cmd('autocmd FileType ron setlocal shiftwidth=4')
 vim.cmd('autocmd FileType ron setlocal tabstop=4')
 
-vim.cmd('autocmd FileType lua setlocal shiftwidth=4')
-vim.cmd('autocmd FileType lua setlocal tabstop=4')
+vim.cmd('autocmd FileType lua setlocal shiftwidth=2')
+vim.cmd('autocmd FileType lua setlocal tabstop=2')
 
 vim.cmd('autocmd FileType json setlocal shiftwidth=4')
 vim.cmd('autocmd FileType json setlocal tabstop=4')
@@ -106,21 +106,35 @@ vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
   end,
 })
 
-vim.api.nvim_create_autocmd({ "BufEnter" }, {
-  pattern = "*/res.odin",
-  callback = function()
-        vim.cmd("TSDisable highlight")
-        vim.cmd("syntax on")
-  end,
+vim.api.nvim_create_autocmd("BufEnter", {
+    callback = function(args)
+        local filename = vim.fn.fnamemodify(args.file, ":t")
+
+        if filename == "atlas.odin" then
+            vim.treesitter.stop(args.buf)
+        elseif filename:match("%.odin$") then
+            vim.treesitter.start(args.buf)
+        end
+    end,
 })
 
-vim.api.nvim_create_autocmd({ "BufUnload" }, {
-  pattern = "*/res.odin",
-  callback = function()
-        vim.cmd("syntax off")
-        vim.cmd("TSEnable highlight")
-  end,
-})
+-- vim.api.nvim_create_autocmd({ "BufEnter" }, {
+--   pattern = "*/atlas.odin",
+--   callback = function(args)
+--         vim.treesitter.stop(args.buf)
+--         vim.cmd("syntax on")
+--         -- vim.notify("❌ Disabled TS", vim.log.levels.INFO)
+--   end,
+-- })
+--
+-- vim.api.nvim_create_autocmd({ "BufLeave" }, {
+--   pattern = "*/atlas.odin",
+--   callback = function(args)
+--         vim.cmd("syntax off")
+--         vim.treesitter.start(args.buf)
+--         -- vim.notify("✅ Enabled TS", vim.log.levels.INFO)
+--   end,
+-- })
 
 vim.filetype.add({
     extension = {
@@ -142,13 +156,6 @@ vim.api.nvim_set_hl(0, "GitSignsCurrentLineBlame", {
   fg = "#586e75",
   italic = true,
 })
-
--- vim.api.nvim_create_autocmd("BufWritePre", {
---   pattern = "*.odin",
---   callback = function()
---     vim.cmd([[%!odinfmt]])
---   end,
--- })
 
 vim.api.nvim_create_autocmd("BufWritePost", {
   pattern = "*.odin",
