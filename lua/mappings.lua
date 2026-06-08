@@ -72,34 +72,34 @@ local function find_script(start_dir, script_name)
     return nil
 end
 
-local function parse_odin_errors(stderr)
+local function parse_odin_errors(out)
   local errors = {}
   local current = nil
 
-  for line in stderr:gmatch("[^\r\n]+") do
-      local file, lnum, col, msg =
-          line:match("^(.+)%((%d+):(%d+)%)%s+(.*)$")
+  for _, line in ipairs(out) do
+    line = line:gsub("\27%[[0-9;]*m", "")
 
-      if file then
-          -- flush previous error
-          if current then
-              table.insert(errors, current)
-          end
+    local file, lnum, col, msg = line:match("^(.+)%((%d+):(%d+)%)%s+(.*)$")
 
-          current = {
-              filename = file,
-              lnum = tonumber(lnum),
-              col = tonumber(col),
-              lines = { msg },
-          }
-
-      elseif current then
-          table.insert(current.lines, line)
+    if file then
+      if current then
+        table.insert(errors, current)
       end
+
+      current = {
+          filename = file,
+          lnum = tonumber(lnum),
+          col = tonumber(col),
+          lines = { line },
+      }
+
+    elseif current then
+      table.insert(current.lines, line)
+    end
   end
 
   if current then
-      table.insert(errors, current)
+    table.insert(errors, current)
   end
 
   return errors
@@ -114,61 +114,90 @@ local function run_build_script()
         return
     end
 
-    local result = vim.system(
-      { "bash", build_script },
-      { text = true }
-    ):wait()
+    local buf = vim.api.nvim_create_buf(false, true)
 
-    local errors = parse_odin_errors(result.stderr)
+    local win = vim.api.nvim_open_win(buf, true, {
+      split = "below",
+      height = math.floor(0.5 * vim.o.lines),
+    })
 
-    local qf = {}
-    for _, err in ipairs(errors) do
-      table.insert(qf, {
-        filename = err.filename,
-        lnum = err.lnum,
-        col = err.col,
-        text = err.lines[1],
-      })
-    end
-    vim.fn.setqflist(qf)
+    local out = {}
 
-    -- vim.fn.setqflist({}, "r", {
-    --   lines = vim.split(, "\n"),
-    --   efm = "%f(%l:%c)%m",
-    -- })
+    vim.fn.termopen(build_script, {
+      on_stdout = function(_, data, _)
+        if data then
+          for _, line in ipairs(data or {}) do
+            table.insert(out, line)
+          end
+        end
+      end,
 
-    vim.cmd("copen")
+      on_stderr = function(_, data, _)
+        if data then
+          for _, line in ipairs(data or {}) do
+            table.insert(out, line)
+          end
+        end
+      end,
 
-    local ns = vim.api.nvim_create_namespace("odin-build")
-    vim.diagnostic.reset(ns)
+      on_exit = function(_, code)
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
 
-    local by_buf = {}
-    for _, err in ipairs(errors) do
-      local bufnr = vim.fn.bufnr(err.filename, true)
+        if vim.api.nvim_buf_is_valid(buf) then
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end
 
-      by_buf[bufnr] = by_buf[bufnr] or {}
+        if code == 0 then
+              vim.cmd("redraw!")
+              vim.notify("✅ Build succeeded", vim.log.levels.INFO)
+        else
+              vim.notify("❌ Build failed", vim.log.levels.ERROR)
+        end
 
-      table.insert(by_buf[bufnr], {
-        lnum = err.lnum - 1,
-        col = err.col - 1,
-        severity = vim.diagnostic.severity.ERROR,
-        source = "odin-build",
-        message = table.concat(err.lines, "\n"),
-      })
-    end
+        local errors = parse_odin_errors(out)
 
-    for bufnr, diags in pairs(by_buf) do
-      vim.diagnostic.set(ns, bufnr, diags)
-    end
+        local qf = {}
+        for _, err in ipairs(errors) do
+          table.insert(qf, {
+            filename = err.filename,
+            lnum = err.lnum,
+            col = err.col,
+            text = err.lines[1],
+          })
+        end
+        vim.fn.setqflist(qf)
 
+        if code ~= 0 then
+          vim.cmd("copen")
+        else
+          vim.cmd("cclose")
+        end
 
+        local ns = vim.api.nvim_create_namespace("odin-build")
+        vim.diagnostic.reset(ns)
 
-    if result.stderr == "" then
-          vim.cmd("redraw!")
-          vim.notify("✅ Build succeeded", vim.log.levels.INFO)
-    else
-          vim.notify("❌ Build failed", vim.log.levels.ERROR)
-    end
+        local by_buf = {}
+        for _, err in ipairs(errors) do
+          local bufnr = vim.fn.bufnr(err.filename, true)
+
+          by_buf[bufnr] = by_buf[bufnr] or {}
+
+          table.insert(by_buf[bufnr], {
+            lnum = err.lnum - 1,
+            col = err.col - 1,
+            severity = vim.diagnostic.severity.ERROR,
+            source = "odin-build",
+            message = table.concat(err.lines, "\n"),
+          })
+        end
+
+        for bufnr, diags in pairs(by_buf) do
+          vim.diagnostic.set(ns, bufnr, diags)
+        end
+      end
+    })
 end
 
 local function run_run_script()
