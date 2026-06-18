@@ -41,6 +41,11 @@ map("n", "N", "Nzz")
 map("n", "*", "*zz")
 map("n", "#", "#zz")
 
+map("n", "]]", ":cnext<CR>:lua vim.diagnostic.open_float()<CR>")
+map("n", "[[", ":cprev<CR>:lua vim.diagnostic.open_float()<CR>")
+
+map("n", "<leader>df", ":lua vim.diagnostic.open_float()<CR>")
+
 vim.api.nvim_create_autocmd("TermClose", {
   pattern = "run.sh*",
   callback = function(args)
@@ -90,7 +95,7 @@ local function parse_odin_errors(out)
           filename = file,
           lnum = tonumber(lnum),
           col = tonumber(col),
-          lines = { line },
+          lines = { msg },
       }
 
     elseif current then
@@ -103,6 +108,15 @@ local function parse_odin_errors(out)
   end
 
   return errors
+end
+
+local function is_quickfix_open()
+  for _, win in ipairs(vim.fn.getwininfo()) do
+    if win.quickfix == 1 then
+      return true
+    end
+  end
+  return false
 end
 
 local function run_build_script()
@@ -170,7 +184,9 @@ local function run_build_script()
         vim.fn.setqflist(qf)
 
         if code ~= 0 then
-          vim.cmd("copen")
+          if is_quickfix_open() == false then
+            vim.cmd("copen")
+          end
         else
           vim.cmd("cclose")
         end
@@ -215,10 +231,10 @@ local function run_run_script()
     vim.cmd("normal! G")
 end
 
-map("n", "<leader>o", run_run_script, { desc = "Run run.sh"})
-map("n", "<leader>O", run_build_script, { desc = "Run build.sh" })
+map("n", "<leader>O", run_run_script, { desc = "Run run.sh"})
+map("n", "<leader>o", run_build_script, { desc = "Run build.sh" })
 
-local function grep_and_open_async()
+local function grep_and_open_odin_token_async()
   local function run_vim_search(patterns)
     for _, pat in ipairs(patterns) do
       if vim.fn.search(pat, "s") ~= 0 then
@@ -311,7 +327,46 @@ local function grep_and_open_async()
   end)
 end
 
-vim.keymap.set("n", "go", grep_and_open_async, { noremap = true, silent = true, desc = "Async grep <cword> :: and open first match" })
+vim.keymap.set("n", "go", grep_and_open_odin_token_async, { noremap = true, silent = true, desc = "Go to odin token underneath cursor." })
+
+local telescope_pickers = require("telescope.pickers")
+local telescope_finders = require("telescope.finders")
+local telescope_conf = require("telescope.config").values
+local telescope_make_entry = require("telescope.make_entry")
+
+local function odin_symbols_live_search()
+  local word = vim.fn.expand("<cword>")
+  telescope_pickers.new({}, {
+    prompt_title = "Odin Symbols",
+    default_text = word,
+
+    finder = telescope_finders.new_job(function(prompt)
+      if prompt == "" then
+        return nil
+      end
+
+      return {
+        "rg",
+        "--vimgrep",
+        "--pcre2",
+        string.format("\\b%s\\b\\s*::\\s*(proc|struct|enum)|\\b%s\\b\\s*::|\\b%s\\b\\s*:\\s*.*=|\\b%s\\b\\s*:",
+          prompt,
+          prompt,
+          prompt,
+          prompt
+        ),
+        ".",
+      }
+    end,
+    telescope_make_entry.gen_from_vimgrep({})
+    ),
+
+    previewer = telescope_conf.grep_previewer({}),
+    sorter = telescope_conf.generic_sorter({}),
+  }):find()
+end
+
+vim.keymap.set("n", "gO", odin_symbols_live_search)
 
 
 local function rg_replace()
