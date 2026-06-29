@@ -366,7 +366,20 @@ local function odin_symbols_live_search()
   }):find()
 end
 
-vim.keymap.set("n", "gO", odin_symbols_live_search)
+vim.keymap.set("n", "gO", odin_symbols_live_search, { desc = "Open live grep with word under cursor for odin symbols."})
+
+local telescope_builtin = require("telescope.builtin")
+local function live_grep_cword()
+  local word = vim.fn.expand("<cword>")
+
+  telescope_builtin.live_grep({
+    default_text = word,
+  })
+end
+
+vim.keymap.set("n", "<leader>gw", live_grep_cword, {
+  desc = "Live grep current word",
+})
 
 
 local function rg_replace()
