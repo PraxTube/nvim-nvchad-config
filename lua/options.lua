@@ -64,6 +64,14 @@ vim.cmd('autocmd FileType glsl setlocal tabstop=4')
 vim.cmd('autocmd FileType make setlocal shiftwidth=4')
 vim.cmd('autocmd FileType make setlocal tabstop=4')
 
+vim.api.nvim_create_autocmd("FileType", {
+    pattern = "odin",
+    callback = function()
+        vim.cmd("setlocal formatoptions+=r")
+        vim.cmd("setlocal formatoptions+=o")
+    end,
+})
+
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
   pattern = "*.wgsl",
   callback = function()
